@@ -1,30 +1,32 @@
-
 import time
-from pathlib import Path
-from urllib.parse import urlparse
 
 import streamlit as st
+
 from bs4 import BeautifulSoup, Comment
+
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+)
 from selenium.webdriver.support.ui import WebDriverWait
 
 
 # =========================================
-# Embedded configuration
+# Configuration
 # =========================================
 
-REMOTE_WEBDRIVER_URL = "https://mrseokar-rpztrnkav.liara.run/webdriver"
-BROWSERLESS_TOKEN = "8TCiyuBpbhqHKVVgNgR"
-
 CUSTOM_USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 "
+    "Mozilla/5.0 (X11; Linux x86_64) "
+    "AppleWebKit/537.36 "
+    "(KHTML, like Gecko) "
+    "Chrome/149.0.0.0 Safari/537.36 "
     "MyStreamlitApp/1.0"
 )
 
 PAGE_LOAD_TIMEOUT = 90
 IMPLICIT_WAIT = 3
+
 SMART_WAIT_TIMEOUT = 50
 STABILITY_WINDOW = 4.0
 POLL_INTERVAL = 0.5
@@ -35,31 +37,31 @@ MAX_PRETTY_HTML_RETURN_CHARS = 300000
 
 
 # =========================================
-# Screenshot
+# Page configuration
 # =========================================
 
-BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
-STATIC_DIR.mkdir(parents=True, exist_ok=True)
-
-SCREENSHOT_FILENAME = "latest_screenshot.png"
-SCREENSHOT_PATH = STATIC_DIR / SCREENSHOT_FILENAME
+st.set_page_config(
+    page_title="Rendered HTML Inspector",
+    page_icon="🌐",
+    layout="wide",
+)
 
 
 # =========================================
-# URL
+# URL helper
 # =========================================
 
 def normalize_url(url: str) -> str:
+
     url = (url or "").strip()
 
     if not url:
-        return url
+        return ""
 
-    parsed = urlparse(url)
-
-    if not parsed.scheme:
-        return "https://" + url
+    if not url.startswith(
+        ("http://", "https://")
+    ):
+        url = "https://" + url
 
     return url
 
@@ -69,16 +71,31 @@ def normalize_url(url: str) -> str:
 # =========================================
 
 def parse_html(html: str):
-    for parser in ["lxml", "html.parser"]:
+
+    for parser in [
+        "lxml",
+        "html.parser",
+    ]:
+
         try:
-            return BeautifulSoup(html, parser)
+            return BeautifulSoup(
+                html,
+                parser
+            )
+
         except Exception:
             continue
 
-    raise RuntimeError("No valid HTML parser is available.")
+    raise RuntimeError(
+        "No valid HTML parser is available."
+    )
 
 
-def truncate_text(value: str, max_len: int) -> str:
+def truncate_text(
+    value: str,
+    max_len: int
+) -> str:
+
     if not value:
         return ""
 
@@ -89,33 +106,75 @@ def truncate_text(value: str, max_len: int) -> str:
 
 
 # =========================================
-# Driver setup
+# Selenium / Chromium
 # =========================================
 
 def create_driver():
 
     chrome_options = webdriver.ChromeOptions()
 
-    chrome_options.set_capability(
-        "browserless:token",
-        BROWSERLESS_TOKEN
+    # Headless browser
+    chrome_options.add_argument(
+        "--headless=new"
     )
 
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1280,720")
+    # Required in Linux containers
+    chrome_options.add_argument(
+        "--no-sandbox"
+    )
+
+    chrome_options.add_argument(
+        "--disable-dev-shm-usage"
+    )
+
+    chrome_options.add_argument(
+        "--disable-gpu"
+    )
+
+    chrome_options.add_argument(
+        "--disable-software-rasterizer"
+    )
+
+    chrome_options.add_argument(
+        "--disable-extensions"
+    )
+
+    chrome_options.add_argument(
+        "--disable-background-networking"
+    )
+
+    chrome_options.add_argument(
+        "--disable-sync"
+    )
+
+    chrome_options.add_argument(
+        "--disable-features=Translate"
+    )
+
+    chrome_options.add_argument(
+        "--window-size=1280,720"
+    )
+
     chrome_options.add_argument(
         f"--user-agent={CUSTOM_USER_AGENT}"
     )
 
-    driver = webdriver.Remote(
-        command_executor=REMOTE_WEBDRIVER_URL,
+    # Chromium location on Linux
+    chrome_options.binary_location = (
+        "/usr/bin/chromium"
+    )
+
+    driver = webdriver.Chrome(
         options=chrome_options
     )
 
-    driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
-    driver.implicitly_wait(IMPLICIT_WAIT)
+    driver.set_page_load_timeout(
+        PAGE_LOAD_TIMEOUT
+    )
+
+    driver.implicitly_wait(
+        IMPLICIT_WAIT
+    )
 
     return driver
 
@@ -131,40 +190,69 @@ def get_page_state(driver):
         readyState: document.readyState,
         title: document.title || "",
         url: location.href || "",
+
         bodyExists: !!document.body,
-        bodyTextLength: document.body ? document.body.innerText.length : 0,
-        htmlLength: document.documentElement
-            ? document.documentElement.outerHTML.length
-            : 0,
-        scrollHeight: document.body
-            ? document.body.scrollHeight
-            : 0,
-        imgTotal: document.images
-            ? document.images.length
-            : 0,
-        imgLoaded: document.images
-            ? Array.from(document.images)
-                .filter(img => img.complete).length
-            : 0,
-        scriptCount: document.scripts
-            ? document.scripts.length
-            : 0
+
+        bodyTextLength:
+            document.body
+                ? document.body.innerText.length
+                : 0,
+
+        htmlLength:
+            document.documentElement
+                ? document.documentElement.outerHTML.length
+                : 0,
+
+        scrollHeight:
+            document.body
+                ? document.body.scrollHeight
+                : 0,
+
+        imgTotal:
+            document.images
+                ? document.images.length
+                : 0,
+
+        imgLoaded:
+            document.images
+                ? Array.from(document.images)
+                    .filter(img => img.complete)
+                    .length
+                : 0,
+
+        scriptCount:
+            document.scripts
+                ? document.scripts.length
+                : 0
     };
     """
 
-    return driver.execute_script(script)
+    return driver.execute_script(
+        script
+    )
 
 
 # =========================================
-# Wait for DOM
+# DOM ready
 # =========================================
 
-def wait_for_dom_ready(driver, timeout=25):
+def wait_for_dom_ready(
+    driver,
+    timeout=25
+):
 
-    WebDriverWait(driver, timeout).until(
+    WebDriverWait(
+        driver,
+        timeout
+    ).until(
         lambda d:
-        d.execute_script("return document.readyState")
-        in ["interactive", "complete"]
+        d.execute_script(
+            "return document.readyState"
+        )
+        in [
+            "interactive",
+            "complete",
+        ]
     )
 
 
@@ -176,20 +264,26 @@ def wait_for_visual_stability(
     driver,
     timeout=SMART_WAIT_TIMEOUT,
     stable_window=STABILITY_WINDOW,
-    poll=POLL_INTERVAL
+    poll=POLL_INTERVAL,
 ):
 
-    end_time = time.time() + timeout
+    end_time = (
+        time.time()
+        + timeout
+    )
 
     stable_since = None
     last_signature = None
+
     samples = []
 
     while time.time() < end_time:
 
         try:
 
-            state = get_page_state(driver)
+            state = get_page_state(
+                driver
+            )
 
             signature = (
                 state["readyState"],
@@ -207,8 +301,14 @@ def wait_for_visual_stability(
             if len(samples) > 8:
                 samples.pop(0)
 
-            has_body = state["bodyExists"]
-            is_complete = state["readyState"] == "complete"
+            has_body = (
+                state["bodyExists"]
+            )
+
+            is_complete = (
+                state["readyState"]
+                == "complete"
+            )
 
             if (
                 has_body
@@ -219,15 +319,20 @@ def wait_for_visual_stability(
                 if stable_since is None:
                     stable_since = time.time()
 
-                if time.time() - stable_since >= stable_window:
+                if (
+                    time.time()
+                    - stable_since
+                    >= stable_window
+                ):
 
                     return {
                         "stable": True,
                         "last_state": state,
-                        "samples": samples
+                        "samples": samples,
                     }
 
             else:
+
                 stable_since = None
 
             last_signature = signature
@@ -242,8 +347,9 @@ def wait_for_visual_stability(
 
         return {
             "stable": False,
-            "last_state": get_page_state(driver),
-            "samples": samples
+            "last_state":
+                get_page_state(driver),
+            "samples": samples,
         }
 
     except Exception:
@@ -251,7 +357,7 @@ def wait_for_visual_stability(
         return {
             "stable": False,
             "last_state": {},
-            "samples": samples
+            "samples": samples,
         }
 
 
@@ -264,14 +370,23 @@ def smooth_scroll_page(driver):
     try:
 
         total_height = driver.execute_script(
-            "return document.body ? document.body.scrollHeight : 0"
+            """
+            return document.body
+                ? document.body.scrollHeight
+                : 0
+            """
         )
 
-        if not total_height or total_height <= 0:
+        if (
+            not total_height
+            or total_height <= 0
+        ):
             return
 
         current = 0
+
         step = 700
+
         last_height = total_height
 
         while current < last_height:
@@ -287,7 +402,11 @@ def smooth_scroll_page(driver):
             try:
 
                 new_height = driver.execute_script(
-                    "return document.body ? document.body.scrollHeight : 0"
+                    """
+                    return document.body
+                        ? document.body.scrollHeight
+                        : 0
+                    """
                 )
 
                 if new_height > last_height:
@@ -316,11 +435,15 @@ def smooth_scroll_page(driver):
 # Pretty HTML
 # =========================================
 
-def build_pretty_html(html: str):
+def build_pretty_html(
+    html: str
+):
 
     try:
 
-        soup = parse_html(html)
+        soup = parse_html(
+            html
+        )
 
         return soup.prettify()
 
@@ -337,7 +460,7 @@ def build_dom_outline(
     element,
     depth=0,
     max_depth=5,
-    max_children=15
+    max_children=15,
 ):
 
     if depth > max_depth:
@@ -348,19 +471,27 @@ def build_dom_outline(
     children = [
         child
         for child in element.children
-        if getattr(child, "name", None)
+        if getattr(
+            child,
+            "name",
+            None
+        )
     ]
 
-    for child in children[:max_children]:
+    for child in children[
+        :max_children
+    ]:
 
         attrs = []
 
         if child.get("id"):
+
             attrs.append(
                 f'id="{child.get("id")}"'
             )
 
         if child.get("class"):
+
             attrs.append(
                 f'class="{" ".join(child.get("class"))}"'
             )
@@ -372,18 +503,21 @@ def build_dom_outline(
         )
 
         line = (
-            f'{"  " * depth}- '
-            f"<{child.name}>{attr_text}"
+            f'{"  " * depth}'
+            f'- <{child.name}>'
+            f'{attr_text}'
         )
 
-        outline.append(line)
+        outline.append(
+            line
+        )
 
         outline.extend(
             build_dom_outline(
                 child,
                 depth + 1,
                 max_depth,
-                max_children
+                max_children,
             )
         )
 
@@ -394,47 +528,89 @@ def build_dom_outline(
 # HTML analysis
 # =========================================
 
-def analyze_html_structured(html: str):
+def analyze_html_structured(
+    html: str
+):
 
-    soup = parse_html(html)
+    soup = parse_html(
+        html
+    )
 
     comments = soup.find_all(
         string=lambda text:
-        isinstance(text, Comment)
+        isinstance(
+            text,
+            Comment
+        )
     )
 
     title = (
-        soup.title.get_text(strip=True)
+        soup.title.get_text(
+            strip=True
+        )
         if soup.title
         else ""
     )
+
+    # -------------------------------------
+    # Meta description
+    # -------------------------------------
 
     meta_description = ""
 
     meta_desc_tag = soup.find(
         "meta",
-        attrs={"name": "description"}
+        attrs={
+            "name": "description"
+        },
     )
 
-    if meta_desc_tag and meta_desc_tag.get("content"):
-        meta_description = (
-            meta_desc_tag["content"].strip()
+    if (
+        meta_desc_tag
+        and meta_desc_tag.get(
+            "content"
         )
+    ):
+
+        meta_description = (
+            meta_desc_tag[
+                "content"
+            ].strip()
+        )
+
+    # -------------------------------------
+    # Canonical
+    # -------------------------------------
 
     canonical = ""
 
     canonical_tag = soup.find(
         "link",
         attrs={
-            "rel": lambda x:
-            x and "canonical" in x
-        }
+            "rel":
+                lambda x:
+                x
+                and "canonical"
+                in x
+        },
     )
 
-    if canonical_tag and canonical_tag.get("href"):
-        canonical = canonical_tag["href"].strip()
+    if (
+        canonical_tag
+        and canonical_tag.get(
+            "href"
+        )
+    ):
 
+        canonical = (
+            canonical_tag[
+                "href"
+            ].strip()
+        )
+
+    # -------------------------------------
     # Headings
+    # -------------------------------------
 
     headings = {}
 
@@ -444,111 +620,282 @@ def analyze_html_structured(html: str):
         "h3",
         "h4",
         "h5",
-        "h6"
+        "h6",
     ]:
 
         headings[level] = [
-            tag.get_text(" ", strip=True)
-            for tag in soup.find_all(level)
+            tag.get_text(
+                " ",
+                strip=True
+            )
+            for tag in soup.find_all(
+                level
+            )
         ]
 
+    # -------------------------------------
     # Semantic sections
+    # -------------------------------------
 
     semantic_sections = {
-        "header": len(soup.find_all("header")),
-        "nav": len(soup.find_all("nav")),
-        "main": len(soup.find_all("main")),
-        "section": len(soup.find_all("section")),
-        "article": len(soup.find_all("article")),
-        "aside": len(soup.find_all("aside")),
-        "footer": len(soup.find_all("footer")),
+
+        "header":
+            len(
+                soup.find_all(
+                    "header"
+                )
+            ),
+
+        "nav":
+            len(
+                soup.find_all(
+                    "nav"
+                )
+            ),
+
+        "main":
+            len(
+                soup.find_all(
+                    "main"
+                )
+            ),
+
+        "section":
+            len(
+                soup.find_all(
+                    "section"
+                )
+            ),
+
+        "article":
+            len(
+                soup.find_all(
+                    "article"
+                )
+            ),
+
+        "aside":
+            len(
+                soup.find_all(
+                    "aside"
+                )
+            ),
+
+        "footer":
+            len(
+                soup.find_all(
+                    "footer"
+                )
+            ),
     }
 
+    # -------------------------------------
     # Forms
+    # -------------------------------------
 
     forms = []
 
-    for form in soup.find_all("form"):
+    for form in soup.find_all(
+        "form"
+    ):
 
         forms.append({
-            "action": form.get("action", ""),
-            "method": (
-                form.get("method", "")
-                or ""
-            ).lower(),
-            "id": form.get("id", ""),
-            "class": (
-                " ".join(form.get("class", []))
-                if form.get("class")
-                else ""
-            ),
-            "inputs": len(form.find_all("input")),
-            "buttons": len(form.find_all("button")),
-            "textareas": len(form.find_all("textarea")),
-            "selects": len(form.find_all("select")),
+
+            "action":
+                form.get(
+                    "action",
+                    ""
+                ),
+
+            "method":
+                (
+                    form.get(
+                        "method",
+                        ""
+                    )
+                    or ""
+                ).lower(),
+
+            "id":
+                form.get(
+                    "id",
+                    ""
+                ),
+
+            "class":
+                (
+                    " ".join(
+                        form.get(
+                            "class",
+                            []
+                        )
+                    )
+                    if form.get(
+                        "class"
+                    )
+                    else ""
+                ),
+
+            "inputs":
+                len(
+                    form.find_all(
+                        "input"
+                    )
+                ),
+
+            "buttons":
+                len(
+                    form.find_all(
+                        "button"
+                    )
+                ),
+
+            "textareas":
+                len(
+                    form.find_all(
+                        "textarea"
+                    )
+                ),
+
+            "selects":
+                len(
+                    form.find_all(
+                        "select"
+                    )
+                ),
         })
 
+    # -------------------------------------
     # Tables
+    # -------------------------------------
 
     tables = []
 
-    for table in soup.find_all("table"):
+    for table in soup.find_all(
+        "table"
+    ):
 
         tables.append({
-            "rows": len(table.find_all("tr")),
-            "headers": len(table.find_all("th")),
-            "cells": len(table.find_all("td")),
+
+            "rows":
+                len(
+                    table.find_all(
+                        "tr"
+                    )
+                ),
+
+            "headers":
+                len(
+                    table.find_all(
+                        "th"
+                    )
+                ),
+
+            "cells":
+                len(
+                    table.find_all(
+                        "td"
+                    )
+                ),
         })
 
+    # -------------------------------------
     # Links
+    # -------------------------------------
 
     top_links = []
 
-    for a in soup.find_all("a", href=True)[:50]:
+    for a in soup.find_all(
+        "a",
+        href=True
+    )[:50]:
 
         top_links.append({
-            "text": a.get_text(
-                " ",
-                strip=True
-            )[:150],
-            "href": a.get("href", "")
+
+            "text":
+                a.get_text(
+                    " ",
+                    strip=True
+                )[:150],
+
+            "href":
+                a.get(
+                    "href",
+                    ""
+                ),
         })
 
+    # -------------------------------------
     # Images
+    # -------------------------------------
 
     top_images = []
 
-    for img in soup.find_all("img")[:50]:
+    for img in soup.find_all(
+        "img"
+    )[:50]:
 
         top_images.append({
-            "src": img.get("src", ""),
-            "alt": img.get("alt", ""),
-            "width": img.get("width", ""),
-            "height": img.get("height", "")
+
+            "src":
+                img.get(
+                    "src",
+                    ""
+                ),
+
+            "alt":
+                img.get(
+                    "alt",
+                    ""
+                ),
+
+            "width":
+                img.get(
+                    "width",
+                    ""
+                ),
+
+            "height":
+                img.get(
+                    "height",
+                    ""
+                ),
         })
 
+    # -------------------------------------
     # JSON-LD
+    # -------------------------------------
 
-    scripts = soup.find_all("script")
+    scripts = soup.find_all(
+        "script"
+    )
 
     json_ld_blocks = []
 
     for script in scripts:
 
-        if script.get("type") == "application/ld+json":
+        if (
+            script.get("type")
+            == "application/ld+json"
+        ):
 
             content = (
                 script.string.strip()
                 if script.string
-                else script.get_text(strip=True)
+                else script.get_text(
+                    strip=True
+                )
             )
 
             if content:
+
                 json_ld_blocks.append(
                     content[:5000]
                 )
 
-    # DOM
+    # -------------------------------------
+    # DOM outline
+    # -------------------------------------
 
     body = (
         soup.body
@@ -559,100 +906,165 @@ def analyze_html_structured(html: str):
     dom_outline = build_dom_outline(
         body,
         max_depth=5,
-        max_children=15
+        max_children=15,
     )
 
+    # -------------------------------------
     # Pretty HTML
+    # -------------------------------------
 
-    pretty_html = build_pretty_html(html)
+    pretty_html = build_pretty_html(
+        html
+    )
+
+    # -------------------------------------
+    # HEAD / BODY / MAIN
+    # -------------------------------------
 
     head_html = ""
     body_html = ""
     main_html = ""
 
     if soup.head:
-        head_html = soup.head.prettify()
+
+        head_html = (
+            soup.head.prettify()
+        )
 
     if soup.body:
-        body_html = soup.body.prettify()
 
-    main_tag = soup.find("main")
+        body_html = (
+            soup.body.prettify()
+        )
+
+    main_tag = soup.find(
+        "main"
+    )
 
     if main_tag:
-        main_html = main_tag.prettify()
+
+        main_html = (
+            main_tag.prettify()
+        )
+
+    # -------------------------------------
+    # Return
+    # -------------------------------------
 
     return {
 
         "document": {
+
             "title": title,
-            "meta_description": meta_description,
-            "canonical": canonical,
-            "html_length": len(html),
-            "comments_count": len(comments),
-            "scripts_count": len(scripts),
-            "styles_count": len(soup.find_all("style")),
-            "links_count": len(soup.find_all("a")),
-            "images_count": len(soup.find_all("img")),
-            "forms_count": len(soup.find_all("form")),
-            "tables_count": len(soup.find_all("table")),
+
+            "meta_description":
+                meta_description,
+
+            "canonical":
+                canonical,
+
+            "html_length":
+                len(html),
+
+            "comments_count":
+                len(comments),
+
+            "scripts_count":
+                len(scripts),
+
+            "styles_count":
+                len(
+                    soup.find_all(
+                        "style"
+                    )
+                ),
+
+            "links_count":
+                len(
+                    soup.find_all(
+                        "a"
+                    )
+                ),
+
+            "images_count":
+                len(
+                    soup.find_all(
+                        "img"
+                    )
+                ),
+
+            "forms_count":
+                len(
+                    soup.find_all(
+                        "form"
+                    )
+                ),
+
+            "tables_count":
+                len(
+                    soup.find_all(
+                        "table"
+                    )
+                ),
         },
 
-        "headings": headings,
+        "headings":
+            headings,
 
-        "semantic_sections": semantic_sections,
+        "semantic_sections":
+            semantic_sections,
 
-        "forms": forms,
+        "forms":
+            forms,
 
-        "tables": tables,
+        "tables":
+            tables,
 
-        "top_links": top_links,
+        "top_links":
+            top_links,
 
-        "top_images": top_images,
+        "top_images":
+            top_images,
 
-        "json_ld_blocks": json_ld_blocks,
+        "json_ld_blocks":
+            json_ld_blocks,
 
-        "dom_outline": dom_outline,
+        "dom_outline":
+            dom_outline,
 
-        "pretty_html": truncate_text(
-            pretty_html,
-            MAX_PRETTY_HTML_RETURN_CHARS
-        ),
-
-        "head_html": head_html,
-
-        "body_html": body_html,
-
-        "main_html": main_html,
-
-        "text_preview": truncate_text(
-            soup.get_text(
-                "\n",
-                strip=True
+        "pretty_html":
+            truncate_text(
+                pretty_html,
+                MAX_PRETTY_HTML_RETURN_CHARS,
             ),
-            MAX_TEXT_PREVIEW_CHARS
-        )
+
+        "head_html":
+            head_html,
+
+        "body_html":
+            body_html,
+
+        "main_html":
+            main_html,
+
+        "text_preview":
+            truncate_text(
+                soup.get_text(
+                    "\n",
+                    strip=True
+                ),
+                MAX_TEXT_PREVIEW_CHARS,
+            ),
     }
 
 
 # =========================================
-# Screenshot
+# Main Selenium fetcher
 # =========================================
 
-def save_latest_screenshot(screenshot_bytes):
-
-    with open(
-        SCREENSHOT_PATH,
-        "wb"
-    ) as f:
-
-        f.write(screenshot_bytes)
-
-
-# =========================================
-# Main fetcher
-# =========================================
-
-def fetch_page_data(url: str):
+def fetch_page_data(
+    url: str
+):
 
     driver = None
 
@@ -660,80 +1072,125 @@ def fetch_page_data(url: str):
 
         driver = create_driver()
 
-        driver.get(url)
+        driver.get(
+            url
+        )
 
         wait_for_dom_ready(
             driver,
             timeout=25
         )
 
-        initial_stability = wait_for_visual_stability(
-            driver,
-            timeout=20,
-            stable_window=2.0
+        initial_stability = (
+            wait_for_visual_stability(
+                driver,
+                timeout=20,
+                stable_window=2.0,
+            )
         )
 
-        smooth_scroll_page(driver)
-
-        final_stability = wait_for_visual_stability(
-            driver,
-            timeout=SMART_WAIT_TIMEOUT,
-            stable_window=STABILITY_WINDOW
+        smooth_scroll_page(
+            driver
         )
 
-        final_html = driver.page_source
+        final_stability = (
+            wait_for_visual_stability(
+                driver,
+                timeout=SMART_WAIT_TIMEOUT,
+                stable_window=STABILITY_WINDOW,
+            )
+        )
 
-        final_title = driver.title
+        final_html = (
+            driver.page_source
+        )
 
-        final_url = driver.current_url
+        final_title = (
+            driver.title
+        )
+
+        final_url = (
+            driver.current_url
+        )
 
         screenshot_png = (
             driver.get_screenshot_as_png()
         )
 
-        page_state = get_page_state(driver)
+        page_state = (
+            get_page_state(
+                driver
+            )
+        )
 
-        html_analysis = analyze_html_structured(
-            final_html
+        html_analysis = (
+            analyze_html_structured(
+                final_html
+            )
         )
 
         return {
+
             "success": True,
-            "title": final_title,
-            "current_url": final_url,
-            "html": truncate_text(
-                final_html,
-                MAX_HTML_RETURN_CHARS
-            ),
-            "html_analysis": html_analysis,
-            "screenshot_png": screenshot_png,
-            "page_state": page_state,
-            "initial_stability": initial_stability,
-            "final_stability": final_stability,
+
+            "title":
+                final_title,
+
+            "current_url":
+                final_url,
+
+            "html":
+                truncate_text(
+                    final_html,
+                    MAX_HTML_RETURN_CHARS,
+                ),
+
+            "html_analysis":
+                html_analysis,
+
+            "screenshot_png":
+                screenshot_png,
+
+            "page_state":
+                page_state,
+
+            "initial_stability":
+                initial_stability,
+
+            "final_stability":
+                final_stability,
         }
 
     except TimeoutException:
 
         return {
+
             "success": False,
+
             "error":
-                "Page load timeout: loading the page exceeded the allowed time."
+                "Page load timeout: "
+                "loading the page exceeded "
+                "the allowed time.",
         }
 
     except WebDriverException as e:
 
         return {
+
             "success": False,
+
             "error":
-                f"WebDriver error: {str(e)}"
+                f"WebDriver error: {str(e)}",
         }
 
     except Exception as e:
 
         return {
+
             "success": False,
+
             "error":
-                f"Unexpected error: {str(e)}"
+                f"Unexpected error: {str(e)}",
         }
 
     finally:
@@ -742,6 +1199,7 @@ def fetch_page_data(url: str):
 
             try:
                 driver.quit()
+
             except Exception:
                 pass
 
@@ -750,73 +1208,79 @@ def fetch_page_data(url: str):
 # Streamlit UI
 # =========================================
 
-st.set_page_config(
-    page_title="Rendered HTML Inspector",
-    page_icon="🌐",
-    layout="wide"
+st.title(
+    "🌐 Rendered HTML Inspector"
 )
-
-
-st.title("🌐 Rendered HTML Inspector")
 
 st.write(
-    "آدرس سایت را وارد کنید تا صفحه با Selenium رندر شده "
-    "و HTML و اطلاعات آن استخراج شود."
+    "URL را وارد کنید تا صفحه با "
+    "Selenium و Chromium مستقیماً "
+    "روی Streamlit Cloud رندر شود."
 )
 
-
-# =========================================
-# URL input
-# =========================================
 
 url = st.text_input(
     "آدرس URL",
-    placeholder="https://example.com"
+    placeholder="https://example.com",
 )
 
 
 inspect_button = st.button(
     "🔍 بررسی صفحه",
     type="primary",
-    use_container_width=True
+    use_container_width=True,
 )
 
 
 # =========================================
-# Run
+# Run inspection
 # =========================================
 
 if inspect_button:
 
-    normalized_url = normalize_url(url)
+    normalized_url = normalize_url(
+        url
+    )
 
     if not normalized_url:
 
-        st.error("لطفاً یک URL وارد کنید.")
+        st.error(
+            "لطفاً یک URL وارد کنید."
+        )
 
     else:
 
-        st.info(
-            f"در حال بارگذاری: {normalized_url}"
+        progress = st.progress(
+            0
         )
-
-        progress = st.progress(0)
 
         status = st.empty()
 
-        status.write("در حال اتصال به Remote WebDriver...")
+        status.info(
+            "در حال راه‌اندازی Chromium..."
+        )
 
-        progress.progress(10)
+        progress.progress(
+            10
+        )
+
+        status.info(
+            "در حال باز کردن صفحه..."
+        )
+
+        progress.progress(
+            20
+        )
 
         result = fetch_page_data(
             normalized_url
         )
 
-        progress.progress(90)
+        progress.progress(
+            100
+        )
 
         if not result["success"]:
-
-            progress.progress(100)
 
             status.empty()
 
@@ -826,12 +1290,6 @@ if inspect_button:
 
         else:
 
-            save_latest_screenshot(
-                result["screenshot_png"]
-            )
-
-            progress.progress(100)
-
             status.success(
                 "صفحه با موفقیت بررسی شد."
             )
@@ -840,9 +1298,13 @@ if inspect_button:
             # Basic information
             # =================================
 
-            st.subheader("📌 اطلاعات صفحه")
+            st.subheader(
+                "📌 اطلاعات صفحه"
+            )
 
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns(
+                2
+            )
 
             with col1:
 
@@ -858,9 +1320,11 @@ if inspect_button:
 
             with col2:
 
-                document = result[
-                    "html_analysis"
-                ]["document"]
+                document = (
+                    result[
+                        "html_analysis"
+                    ]["document"]
+                )
 
                 st.metric(
                     "HTML Length",
@@ -876,19 +1340,25 @@ if inspect_button:
             # Screenshot
             # =================================
 
-            st.subheader("📸 Screenshot")
+            st.subheader(
+                "📸 Screenshot"
+            )
 
             st.image(
-                result["screenshot_png"],
+                result[
+                    "screenshot_png"
+                ],
                 caption=result["title"],
-                use_container_width=True
+                use_container_width=True,
             )
 
             st.download_button(
                 label="⬇️ دانلود Screenshot",
-                data=result["screenshot_png"],
+                data=result[
+                    "screenshot_png"
+                ],
                 file_name="latest_screenshot.png",
-                mime="image/png"
+                mime="image/png",
             )
 
             # =================================
@@ -896,12 +1366,13 @@ if inspect_button:
             # =================================
 
             with st.expander(
-                "⚙️ Page State",
-                expanded=False
+                "⚙️ Page State"
             ):
 
                 st.json(
-                    result["page_state"]
+                    result[
+                        "page_state"
+                    ]
                 )
 
             # =================================
@@ -909,8 +1380,7 @@ if inspect_button:
             # =================================
 
             with st.expander(
-                "⏳ Stability Information",
-                expanded=False
+                "⏳ Stability Information"
             ):
 
                 st.write(
@@ -918,7 +1388,9 @@ if inspect_button:
                 )
 
                 st.json(
-                    result["initial_stability"]
+                    result[
+                        "initial_stability"
+                    ]
                 )
 
                 st.write(
@@ -926,11 +1398,13 @@ if inspect_button:
                 )
 
                 st.json(
-                    result["final_stability"]
+                    result[
+                        "final_stability"
+                    ]
                 )
 
             # =================================
-            # Document analysis
+            # Document
             # =================================
 
             analysis = result[
@@ -939,11 +1413,13 @@ if inspect_button:
 
             with st.expander(
                 "📊 Document Analysis",
-                expanded=True
+                expanded=True,
             ):
 
                 st.json(
-                    analysis["document"]
+                    analysis[
+                        "document"
+                    ]
                 )
 
             # =================================
@@ -955,11 +1431,13 @@ if inspect_button:
             ):
 
                 st.json(
-                    analysis["headings"]
+                    analysis[
+                        "headings"
+                    ]
                 )
 
             # =================================
-            # Semantic sections
+            # Semantic
             # =================================
 
             with st.expander(
@@ -967,7 +1445,9 @@ if inspect_button:
             ):
 
                 st.json(
-                    analysis["semantic_sections"]
+                    analysis[
+                        "semantic_sections"
+                    ]
                 )
 
             # =================================
@@ -1019,7 +1499,9 @@ if inspect_button:
             ):
 
                 st.json(
-                    analysis["top_links"]
+                    analysis[
+                        "top_links"
+                    ]
                 )
 
             # =================================
@@ -1031,7 +1513,9 @@ if inspect_button:
             ):
 
                 st.json(
-                    analysis["top_images"]
+                    analysis[
+                        "top_images"
+                    ]
                 )
 
             # =================================
@@ -1042,7 +1526,9 @@ if inspect_button:
                 "🧩 JSON-LD"
             ):
 
-                if analysis["json_ld_blocks"]:
+                if analysis[
+                    "json_ld_blocks"
+                ]:
 
                     st.code(
                         "\n\n".join(
@@ -1050,7 +1536,7 @@ if inspect_button:
                                 "json_ld_blocks"
                             ]
                         ),
-                        language="json"
+                        language="json",
                     )
 
                 else:
@@ -1060,7 +1546,7 @@ if inspect_button:
                     )
 
             # =================================
-            # DOM Outline
+            # DOM
             # =================================
 
             with st.expander(
@@ -1069,13 +1555,15 @@ if inspect_button:
 
                 st.code(
                     "\n".join(
-                        analysis["dom_outline"]
+                        analysis[
+                            "dom_outline"
+                        ]
                     ),
-                    language="text"
+                    language="text",
                 )
 
             # =================================
-            # Text Preview
+            # Text
             # =================================
 
             with st.expander(
@@ -1084,12 +1572,14 @@ if inspect_button:
 
                 st.text_area(
                     "Rendered Text",
-                    analysis["text_preview"],
-                    height=400
+                    analysis[
+                        "text_preview"
+                    ],
+                    height=400,
                 )
 
             # =================================
-            # HEAD HTML
+            # HEAD
             # =================================
 
             with st.expander(
@@ -1097,23 +1587,29 @@ if inspect_button:
             ):
 
                 st.code(
-                    analysis["head_html"],
-                    language="html"
+                    analysis[
+                        "head_html"
+                    ],
+                    language="html",
                 )
 
             # =================================
-            # MAIN HTML
+            # MAIN
             # =================================
 
             with st.expander(
                 "🎯 MAIN HTML"
             ):
 
-                if analysis["main_html"]:
+                if analysis[
+                    "main_html"
+                ]:
 
                     st.code(
-                        analysis["main_html"],
-                        language="html"
+                        analysis[
+                            "main_html"
+                        ],
+                        language="html",
                     )
 
                 else:
@@ -1123,7 +1619,7 @@ if inspect_button:
                     )
 
             # =================================
-            # BODY HTML
+            # BODY
             # =================================
 
             with st.expander(
@@ -1131,8 +1627,10 @@ if inspect_button:
             ):
 
                 st.code(
-                    analysis["body_html"],
-                    language="html"
+                    analysis[
+                        "body_html"
+                    ],
+                    language="html",
                 )
 
             # =================================
@@ -1145,7 +1643,7 @@ if inspect_button:
 
                 st.code(
                     result["html"],
-                    language="html"
+                    language="html",
                 )
 
             # =================================
@@ -1156,5 +1654,5 @@ if inspect_button:
                 label="⬇️ دانلود Rendered HTML",
                 data=result["html"],
                 file_name="rendered_page.html",
-                mime="text/html"
+                mime="text/html",
             )
